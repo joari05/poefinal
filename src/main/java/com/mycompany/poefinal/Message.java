@@ -1,17 +1,25 @@
 package com.mycompany.poefinal;
 
 import java.util.ArrayList;
-import javax.swing.JOptionPane;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.List;
 import java.util.Random;
+import java.util.Scanner;
+import javax.swing.JOptionPane;
+import java.io.*;
 import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 
 public class Message {
-   private static int totalMessagesSent = 0;
+    private static int totalMessagesSent = 0;
     private static int messageCount = 0;
-    private static List<String> sentMessages = new ArrayList<>();
+
+    // === ARRAYS REQUERIDOS ===
+    public static List<Message> sentMessages = new ArrayList<>();
+    public static List<Message> disregardedMessages = new ArrayList<>();
+    public static List<Message> storedMessages = new ArrayList<>();
+    public static List<String> messageHashes = new ArrayList<>();
+    public static List<String> messageIDs = new ArrayList<>();
 
     private String messageID;
     private String recipient;
@@ -23,11 +31,13 @@ public class Message {
         this.messageText = messageText;
         this.messageID = generateMessageID();
         this.messageHash = createMessageHash();
+
+        messageIDs.add(this.messageID);
+        messageHashes.add(this.messageHash);
     }
 
     private String generateMessageID() {
-        String id = String.format("%010d", new Random().nextInt(1000000000));
-        return id;
+        return String.format("%010d", new Random().nextInt(1_000_000_000));
     }
 
     public boolean checkMessageID() {
@@ -35,7 +45,7 @@ public class Message {
     }
 
     public boolean checkRecipientCell() {
-        return recipient.matches("^\\+27\\d{9}$");
+        return recipient != null && recipient.matches("^\\+27\\d{9}$");
     }
 
     public String validateMessageLength() {
@@ -54,15 +64,17 @@ public class Message {
 
     public String sentMessage(String option) {
         switch (option.toLowerCase()) {
-            case "1":
+            case "send":
+                sentMessages.add(this);
                 totalMessagesSent++;
-                sentMessages.add(printMessages());
                 return "Message successfully sent.";
-            case "2":
-                return "Press 0 to delete message.";
-            case "3":
+            case "store":
+                storedMessages.add(this);
                 storeMessage();
                 return "Message successfully stored.";
+            case "discard":
+                disregardedMessages.add(this);
+                return "Message discarded.";
             default:
                 return "Invalid option.";
         }
@@ -93,14 +105,95 @@ public class Message {
         }
     }
 
+    public static void loadStoredMessagesFromFile() {
+        try (BufferedReader reader = new BufferedReader(new FileReader("stored_messages.json"))) {
+            String line;
+            JSONParser parser = new JSONParser();
+            while ((line = reader.readLine()) != null) {
+                JSONObject json = (JSONObject) parser.parse(line);
+                Message msg = new Message(
+                    (String) json.get("recipient"),
+                    (String) json.get("message")
+                );
+                msg.messageID = (String) json.get("messageID");
+                msg.messageHash = (String) json.get("hash");
+                storedMessages.add(msg);
+                messageIDs.add(msg.messageID);
+                messageHashes.add(msg.messageHash);
+            }
+        } catch (IOException | ParseException e) {
+            JOptionPane.showMessageDialog(null, "Error reading stored messages: " + e.getMessage());
+        }
+    }
+
+    // === PART 3 FEATURES ===
+
+    public static void displaySentMessages() {
+        for (Message msg : sentMessages) {
+            System.out.println("Sender: [User] ➡ Recipient: " + msg.recipient);
+        }
+    }
+
+    public static void getLongestMessage() {
+        Message longest = null;
+        for (Message msg : sentMessages) {
+            if (longest == null || msg.messageText.length() > longest.messageText.length()) {
+                longest = msg;
+            }
+        }
+        if (longest != null) {
+            System.out.println("📏 Longest message: \n" + longest.printMessages());
+        }
+    }
+
+    public static void findMessageByID(String searchID) {
+        for (Message msg : sentMessages) {
+            if (msg.messageID.equals(searchID)) {
+                System.out.println("🔍 Message found:\n" + msg.printMessages());
+                return;
+            }
+        }
+        System.out.println("❌ Message with ID " + searchID + " not found.");
+    }
+
+    public static void findMessagesByRecipient(String recipientNumber) {
+        for (Message msg : sentMessages) {
+            if (msg.recipient.equals(recipientNumber)) {
+                System.out.println("📨 Message to " + recipientNumber + ":\n" + msg.messageText);
+            }
+        }
+    }
+
+    public static void deleteMessageByHash(String hash) {
+        for (int i = 0; i < sentMessages.size(); i++) {
+            if (sentMessages.get(i).messageHash.equals(hash)) {
+                sentMessages.remove(i);
+                System.out.println("🗑️ Message with hash " + hash + " deleted.");
+                return;
+            }
+        }
+        System.out.println("❌ Message with hash " + hash + " not found.");
+    }
+
+    public static void displayMessageReport() {
+        System.out.println("===== Sent Message Report =====");
+        for (Message msg : sentMessages) {
+            System.out.println(msg.printMessages());
+        }
+        System.out.println("Total messages sent: " + sentMessages.size());
+    }
+
     public static void resetCount() {
         totalMessagesSent = 0;
         messageCount = 0;
         sentMessages.clear();
+        disregardedMessages.clear();
+        storedMessages.clear();
+        messageHashes.clear();
+        messageIDs.clear();
     }
 
     public static void incrementMessageCount() {
         messageCount++;
     }
-
 }
